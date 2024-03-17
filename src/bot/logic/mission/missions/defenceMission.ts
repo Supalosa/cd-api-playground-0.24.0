@@ -25,7 +25,7 @@ export class DefenceMission extends Mission<CombatSquad> {
         logger: DebugLogger,
     ) {
         super(uniqueName, logger);
-        this.squad = new CombatSquad(rallyArea, defenceArea, radius);
+        this.squad = new CombatSquad(defenceArea);
     }
 
     _onAiUpdate(
@@ -41,19 +41,7 @@ export class DefenceMission extends Mission<CombatSquad> {
             .map((unit) => gameApi.getUnitData(unit.unitId))
             .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
 
-        const update = this.squad.onAiUpdate(
-            gameApi,
-            actionsApi,
-            actionBatcher,
-            playerData,
-            this,
-            matchAwareness,
-            this.logger,
-        );
-
-        if (update.type !== "noop") {
-            return update;
-        }
+        this.squad.onAiUpdate(gameApi, actionsApi, actionBatcher, playerData, this, matchAwareness, this.logger);
 
         if (foundTargets.length === 0) {
             this.priority = 0;

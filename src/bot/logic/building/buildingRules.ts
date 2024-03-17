@@ -205,7 +205,7 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
 
     ["GAPILL", new AntiGroundStaticDefence(2, 1, 5, 5)], // Pillbox
     ["ATESLA", new AntiGroundStaticDefence(2, 1, 10, 3)], // Prism Cannon
-    ["NASAM", new AntiAirStaticDefence(2, 1, 5)], // Patriot Missile
+    ["NASAM", new AntiAirStaticDefence(2, 1, 5, 5)], // Patriot Missile
     ["GAWALL", new AntiGroundStaticDefence(0, 0, 0, 0)], // Walls
 
     ["E1", new BasicGroundUnit(2, 2, 0.2, 0)], // GI
@@ -233,7 +233,7 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["NATECH", new BasicBuilding(20, 1, 4000)], // Soviet Battle Lab
 
     ["NALASR", new AntiGroundStaticDefence(2, 1, 5, 5)], // Sentry Gun
-    ["NAFLAK", new AntiAirStaticDefence(2, 1, 5)], // Flak Cannon
+    ["NAFLAK", new AntiAirStaticDefence(2, 1, 5, 5)], // Flak Cannon
     ["TESLA", new AntiGroundStaticDefence(2, 1, 10, 3)], // Tesla Coil
     ["NAWALL", new AntiGroundStaticDefence(0, 0, 0, 0)], // Walls
 

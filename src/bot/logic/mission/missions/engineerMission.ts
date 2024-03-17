@@ -72,7 +72,7 @@ export class EngineerMission extends Mission {
 const MAX_TECH_CAPTURE_RADIUS = 50;
 
 const TECH_CHECK_INTERVAL_TICKS = 300;
-const MAX_ATTEMPTS_PER_TECH_STRUCTURE = 3;
+const MAX_ATTEMPTS_PER_TECH_STRUCTURE = 2;
 
 export class EngineerMissionFactory implements MissionFactory {
     private lastCheckAt = 0;
@@ -102,7 +102,7 @@ export class EngineerMissionFactory implements MissionFactory {
 
         eligibleTechBuildings
             .filter((b) => gameApi.getGameObjectData(b)?.hitPoints ?? 0 > 0)
-            .filter((b) => this.attemptCount.get(b) ?? 0 <= MAX_ATTEMPTS_PER_TECH_STRUCTURE)
+            .filter((b) => (this.attemptCount.get(b) ?? 0) <= MAX_ATTEMPTS_PER_TECH_STRUCTURE)
             .forEach((techBuildingId) => {
                 if (
                     missionController.addMission(

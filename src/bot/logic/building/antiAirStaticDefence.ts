@@ -8,6 +8,7 @@ export class AntiAirStaticDefence implements AiBuildingRules {
         private basePriority: number,
         private baseAmount: number,
         private airStrength: number,
+        private limit: number,
     ) {}
 
     getPlacementLocation(
@@ -40,6 +41,10 @@ export class AntiAirStaticDefence implements AiBuildingRules {
         technoRules: TechnoRules,
         threatCache: GlobalThreat | null,
     ): number {
+        const numOwned = numBuildingsOwnedOfType(game, playerData, technoRules);
+        if (numOwned >= this.limit) {
+            return 0;
+        }
         if (threatCache) {
             let denominator = threatCache.totalAvailableAntiAirFirepower + this.airStrength;
             if (threatCache.totalOffensiveAirThreat > denominator * 1.1) {
@@ -49,7 +54,6 @@ export class AntiAirStaticDefence implements AiBuildingRules {
             }
         }
         const strengthPerCost = (this.airStrength / technoRules.cost) * 1000;
-        const numOwned = numBuildingsOwnedOfType(game, playerData, technoRules);
         return this.basePriority * (1.0 - numOwned / this.baseAmount) * strengthPerCost;
     }
 

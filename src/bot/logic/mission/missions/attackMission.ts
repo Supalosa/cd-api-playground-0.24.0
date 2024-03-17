@@ -74,7 +74,7 @@ export class AttackMission extends Mission<AttackFailReason> {
         private dissolveUnfulfilledAt: number | null = null,
     ) {
         super(uniqueName, logger);
-        this.squad = new CombatSquad(rallyArea, attackArea, radius);
+        this.squad = new CombatSquad(attackArea);
     }
 
     _onAiUpdate(
@@ -142,19 +142,7 @@ export class AttackMission extends Mission<AttackFailReason> {
             .map((unit) => gameApi.getUnitData(unit.unitId))
             .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
 
-        const update = this.squad.onAiUpdate(
-            gameApi,
-            actionsApi,
-            actionBatcher,
-            playerData,
-            this,
-            matchAwareness,
-            this.logger,
-        );
-
-        if (update.type !== "noop") {
-            return update;
-        }
+        this.squad.onAiUpdate(gameApi, actionsApi, actionBatcher, playerData, this, matchAwareness, this.logger);
 
         if (foundTargets.length > 0) {
             this.lastTargetSeenAt = gameApi.getCurrentTick();

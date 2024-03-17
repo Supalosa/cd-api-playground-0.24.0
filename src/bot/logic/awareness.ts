@@ -1,10 +1,11 @@
-import { GameApi, GameObjectData, ObjectType, PlayerData, UnitData, Vector2 } from "@chronodivide/game-api";
+import { GameApi, GameObjectData, PlayerData, Vector2 } from "@chronodivide/game-api";
 import { SectorCache } from "./map/sector";
 import { GlobalThreat } from "./threat/threat";
 import { calculateGlobalThreat } from "./threat/threatCalculator.js";
-import { determineMapBounds, getDistanceBetweenPoints, getPointTowardsOtherPoint } from "./map/map.js";
+import { getPointTowardsOtherPoint } from "./map/map.js";
 import { Circle, Quadtree } from "@timohausmann/quadtree-ts";
 import { ScoutingManager } from "./common/scout.js";
+import { maxBy } from "./common/utils.js";
 
 export type UnitPositionQuery = { x: number; y: number; unitId: number };
 
@@ -35,9 +36,19 @@ export interface MatchAwareness {
     getHostilesNearPoint(x: number, y: number, radius: number): UnitPositionQuery[];
 
     /**
-     * Returns the main rally point for the AI, which updates every few ticks.
+     * Returns the main rally point for the current player, which updates every few ticks.
      */
     getMainRallyPoint(): Vector2;
+
+    /**
+     * Returns the gather point near the currently targeted player.
+     */
+    getEnemyGatherPoint(): Vector2 | null;
+
+    /**
+     * Returns the name of the player we are directing our hostility to.
+     */
+    getTargetedPlayer(): string | null;
 
     onGameStart(gameApi: GameApi, playerData: PlayerData): void;
 
@@ -79,6 +90,10 @@ export class MatchAwarenessImpl implements MatchAwareness {
     private hostileQuadTree: Quadtree<QTUnit>;
     private scoutingManager: ScoutingManager;
 
+    private currentTarget: string | null = null;
+
+    private currentGatherPoint: Vector2 | null = null;
+
     constructor(
         private threatCache: GlobalThreat | null,
         private sectorCache: SectorCache,
@@ -105,12 +120,15 @@ export class MatchAwarenessImpl implements MatchAwareness {
     getThreatCache(): GlobalThreat | null {
         return this.threatCache;
     }
+
     getSectorCache(): SectorCache {
         return this.sectorCache;
     }
+
     getMainRallyPoint(): Vector2 {
         return this.mainRallyPoint;
     }
+
     getScoutingManager(): ScoutingManager {
         return this.scoutingManager;
     }
@@ -135,7 +153,7 @@ export class MatchAwarenessImpl implements MatchAwareness {
         this.scoutingManager.onGameStart(gameApi, playerData, this.sectorCache);
     }
 
-    onAiUpdate(game: GameApi, playerData: PlayerData): void {
+    public onAiUpdate(game: GameApi, playerData: PlayerData): void {
         const sectorCache = this.sectorCache;
 
         sectorCache.updateSectors(game.getCurrentTick(), SECTORS_TO_UPDATE_PER_CYCLE, game.mapApi, playerData);
@@ -163,48 +181,75 @@ export class MatchAwarenessImpl implements MatchAwareness {
             console.error(`caught error`, hostileUnitIds);
         }
 
-        if (game.getCurrentTick() % THREAT_UPDATE_INTERVAL_TICKS == 0) {
-            let visibility = sectorCache?.getOverallVisibility();
-            if (visibility) {
-                this.logger(`${Math.round(visibility * 1000.0) / 10}% of tiles visible. Calculating threat.`);
-                // Update the global threat cache
-                this.threatCache = calculateGlobalThreat(game, playerData, visibility);
+        const visibility = sectorCache?.getOverallVisibility();
+        if (game.getCurrentTick() % THREAT_UPDATE_INTERVAL_TICKS == 0 && visibility) {
+            this.logger(`${Math.round(visibility * 1000.0) / 10}% of tiles visible. Calculating threat.`);
 
-                // As the game approaches 2 hours, be more willing to attack. (15 ticks per second)
-                const gameLengthFactor = Math.max(0, 1.0 - game.getCurrentTick() / (15 * 7200.0));
-                this.logger(`Game length multiplier: ${gameLengthFactor}`);
+            // Update the global threat cache.
+            this.threatCache = calculateGlobalThreat(game, playerData, visibility);
 
+            // TODO: this can go away. We don't handle attack/defence mode anymore.
+            // As the game approaches 2 hours, be more willing to attack. (15 ticks per second)
+            const gameLengthFactor = Math.max(0, 1.0 - game.getCurrentTick() / (15 * 7200.0));
+            this.logger(`Game length multiplier: ${gameLengthFactor}`);
+
+            if (!this._shouldAttack) {
+                // If not attacking, make it harder to switch to attack mode by multiplying the opponent's threat.
+                this._shouldAttack = this.checkShouldAttack(this.threatCache, 1.25 * gameLengthFactor);
+                if (this._shouldAttack) {
+                    this.logger(`Globally switched to attack mode.`);
+                }
+            } else {
+                // If currently attacking, make it harder to switch to defence mode my dampening the opponent's threat.
+                this._shouldAttack = this.checkShouldAttack(this.threatCache, 0.75 * gameLengthFactor);
                 if (!this._shouldAttack) {
-                    // If not attacking, make it harder to switch to attack mode by multiplying the opponent's threat.
-                    this._shouldAttack = this.checkShouldAttack(this.threatCache, 1.25 * gameLengthFactor);
-                    if (this._shouldAttack) {
-                        this.logger(`Globally switched to attack mode.`);
-                    }
-                } else {
-                    // If currently attacking, make it harder to switch to defence mode my dampening the opponent's threat.
-                    this._shouldAttack = this.checkShouldAttack(this.threatCache, 0.75 * gameLengthFactor);
-                    if (!this._shouldAttack) {
-                        this.logger(`Globally switched to defence mode.`);
-                    }
+                    this.logger(`Globally switched to defence mode.`);
                 }
             }
+
+            // Current target is the hostile player with the highest threat.
+            const enemiesAndThreat = game
+                .getPlayers()
+                .filter((p) => p !== playerData.name && !game.areAlliedPlayers(playerData.name, p))
+                .map((p) => ({
+                    player: p,
+                    threat: this.threatCache?.totalThreatPerPlayer[p] ?? 0,
+                }));
+            this.currentTarget = maxBy(enemiesAndThreat, (x) => x.threat)?.player ?? null;
         }
 
         // Update rally point every few ticks.
-        if (game.getCurrentTick() % RALLY_POINT_UPDATE_INTERVAL_TICKS === 0) {
-            const enemyPlayers = game
-                .getPlayers()
-                .filter((p) => p !== playerData.name && !game.areAlliedPlayers(playerData.name, p));
-            const enemy = game.getPlayerData(enemyPlayers[0]);
+        if (game.getCurrentTick() % RALLY_POINT_UPDATE_INTERVAL_TICKS === 0 && this.currentTarget) {
+            const enemy = game.getPlayerData(this.currentTarget);
+            // Rally point is 15 units away from our start location towards the enemy base.
             this.mainRallyPoint = getPointTowardsOtherPoint(
                 game,
                 playerData.startLocation,
                 enemy.startLocation,
-                10,
-                10,
+                15,
+                15,
+                0,
+            );
+
+            // Update enemy gather point to the point 20 units away.
+            // Note: this corresponds to AISafeDistance in rules.ini and should probably be read from there.
+            this.currentGatherPoint = getPointTowardsOtherPoint(
+                game,
+                enemy.startLocation,
+                playerData.startLocation,
+                20,
+                20,
                 0,
             );
         }
+    }
+
+    public getEnemyGatherPoint(): Vector2 | null {
+        return this.currentGatherPoint;
+    }
+
+    public getTargetedPlayer(): string | null {
+        return this.currentTarget;
     }
 
     public getGlobalDebugText(): string | undefined {

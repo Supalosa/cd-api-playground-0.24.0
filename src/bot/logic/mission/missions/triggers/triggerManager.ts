@@ -1,6 +1,6 @@
 // State management for ai.ini TriggerTypes
 
-import { GameApi, IniFile, LoggerApi, PlayerData, ProductionApi, SideType } from "@chronodivide/game-api";
+import { GameApi, IniFile, PlayerData, ProductionApi, SideType } from "@chronodivide/game-api";
 import { BotDifficulty } from "../../../../bot.js";
 import {
     AiTriggerOwnerHouse,
@@ -13,12 +13,12 @@ import { DebugLogger, countBy, setDifference } from "../../../common/utils.js";
 import { MissionController } from "../../missionController.js";
 import { AiTeamType, loadTeamTypes } from "./aiTeamTypes.js";
 import { AiTaskForce, loadTaskForces } from "./aiTaskForces.js";
-import { AttackMission, generateTarget } from "../attackMission.js";
+import { generateTarget } from "../attackMission.js";
 import { MatchAwareness } from "../../../awareness.js";
-import { match } from "assert";
 import { MissionFactory } from "../../missionFactories.js";
 import { Mission } from "../../mission.js";
 import { AiScriptType, loadScriptTypes } from "./scriptTypes.js";
+import { ScriptedTeamMission } from "../scriptedTeamMission.js";
 
 type AiTriggerCacheState = {
     enemyUnitCount: { [name: string]: number };
@@ -95,13 +95,17 @@ const conditionEvaluators: Map<ConditionType, ConditionEvaluator> = new Map([
     [ConditionType.NeutralHouseOwns, EVALUATOR_NOT_IMPLEMENTED],
 ]);
 
-type ResolvedTeamType = Omit<AiTeamType, "taskForce" | "script"> & {
+export type ResolvedTeamType = Omit<AiTeamType, "taskForce" | "script"> & {
     taskForce: AiTaskForce;
     script: AiScriptType;
 };
 
 type ResolvedTriggerType = Omit<AiTriggerType, "teamType"> & {
     teamType: ResolvedTeamType;
+};
+
+export type GeneralAiRules = {
+    dissolveUnfilledTeamDelay: number;
 };
 
 /**
@@ -113,7 +117,7 @@ export class TriggeredAttackMissionFactory implements MissionFactory {
 
     private teamCounts: { [teamName: string]: number } = {};
 
-    private dissolveUnfilledTeamDelay: number;
+    private generalRules: GeneralAiRules;
 
     private lastTeamCheckAt = 0;
     private previousValidTriggers = new Set<string>();
@@ -141,7 +145,7 @@ export class TriggeredAttackMissionFactory implements MissionFactory {
                 break;
         }
         this.triggerTypes = triggerTypes;
-        this.dissolveUnfilledTeamDelay = dissolveUnfilledTeamDelay;
+        this.generalRules = { dissolveUnfilledTeamDelay };
     }
 
     getName(): string {
@@ -181,7 +185,7 @@ export class TriggeredAttackMissionFactory implements MissionFactory {
 
         const aiTeamTypes = loadTeamTypes(aiIni);
         const aiTaskForces = loadTaskForces(aiIni);
-        const aiScriptTypes = loadScriptTypes(aiIni);
+        const aiScriptTypes = loadScriptTypes(aiIni, rulesIni);
 
         type ResolvedTeamTypes = { [name: string]: ResolvedTeamType };
 
@@ -272,7 +276,9 @@ export class TriggeredAttackMissionFactory implements MissionFactory {
             return;
         }
         // Calculate expensive things only once before all triggers.
-        const enemyUnits = game.getVisibleUnits(myPlayer.name, "enemy");
+        // We only add the targeted player to the cache, otherwise we get weird situations like triggering "vs Ally" missions against Soviets in 2v2 games.
+        const targetedPlayer = matchAwareness.getTargetedPlayer();
+        const enemyUnits = targetedPlayer ? game.getVisibleUnits(targetedPlayer, "self") : [];
         const ownUnits = game.getVisibleUnits(myPlayer.name, "self");
 
         const enemyCredits = game
@@ -338,15 +344,11 @@ export class TriggeredAttackMissionFactory implements MissionFactory {
         if (!attackTarget) {
             return;
         }
-        const mission = new AttackMission(
+        const mission = new ScriptedTeamMission(
             `aiTriggerMission_${chosenMission.name}_${game.getCurrentTick()}`,
-            chosenMission.teamType.priority,
-            matchAwareness.getMainRallyPoint(),
-            attackTarget,
-            30,
+            chosenMission.teamType,
+            this.generalRules,
             logger,
-            chosenMission.teamType.taskForce.units,
-            game.getCurrentTick() + this.dissolveUnfilledTeamDelay,
         );
         const newMission = missionController.addMission(mission);
 

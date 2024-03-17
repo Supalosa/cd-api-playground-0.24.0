@@ -18,6 +18,7 @@ import { Countries, formatTimeDuration } from "./logic/common/utils.js";
 import { TriggeredAttackMissionFactory } from "./logic/mission/missions/triggers/triggerManager.js";
 import { createBaseMissionFactories } from "./logic/mission/missionFactories.js";
 import { DynamicAttackMissionFactory } from "./logic/mission/missions/attackMission.js";
+import { EngineerMissionFactory } from "./logic/mission/missions/engineerMission.js";
 
 const DEBUG_STATE_UPDATE_INTERVAL_SECONDS = 6;
 

@@ -12,7 +12,7 @@ import { MatchAwareness } from "../awareness.js";
 import { DebugLogger } from "../common/utils.js";
 import { ActionBatcher } from "./actionBatcher.js";
 import { getDistanceBetweenTileAndPoint } from "../map/map.js";
-import { getCachedTechnoRules } from "../common/rulesCache.js";
+import { getTechnoRulesForUnit } from "../common/rulesCache.js";
 
 const calculateCenterOfMass: (unitTiles: Tile[]) => {
     centerOfMass: Vector2;
@@ -135,7 +135,7 @@ export abstract class Mission<FailureReasons = undefined> {
         return this.unitIds
             .map((unitId) => ({
                 unitId,
-                rules: getCachedTechnoRules(gameApi, unitId),
+                rules: getTechnoRulesForUnit(gameApi, unitId),
             }))
             .filter((entry): entry is ValidEntry => entry.rules !== null)
             .filter(({ rules }) => filter(rules))

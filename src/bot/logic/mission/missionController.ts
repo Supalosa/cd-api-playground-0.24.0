@@ -50,6 +50,9 @@ export class MissionController {
     // Tracks missions to be externally disbanded the next time the mission update loop occurs.
     private forceDisbandedMissions: string[] = [];
 
+    // Batch actions to reduce spamming of actions for larger armies.
+    private actionBatcher = new ActionBatcher();
+
     constructor(
         private missionFactories: MissionFactory[],
         private logger: DebugLogger,
@@ -86,13 +89,10 @@ export class MissionController {
 
         this.updateUnitIds(gameApi);
 
-        // Batch actions to reduce spamming of actions for larger armies.
-        const actionBatcher = new ActionBatcher();
-
         // Poll missions for requested actions.
         const missionActions: MissionWithAction<any>[] = this.missions.map((mission) => ({
             mission,
-            action: mission.onAiUpdate(gameApi, actionsApi, playerData, matchAwareness, actionBatcher),
+            action: mission.onAiUpdate(gameApi, actionsApi, playerData, matchAwareness, this.actionBatcher),
         }));
 
         // Handle disbands and merges.
@@ -298,7 +298,7 @@ export class MissionController {
         this.updateRequestedUnitTypes(unitTypeToHighestRequest);
 
         // Send all actions that can be batched together.
-        actionBatcher.resolve(actionsApi);
+        this.actionBatcher.resolve(gameApi, actionsApi);
 
         // Remove disbanded and merged missions.
         this.missions

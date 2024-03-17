@@ -13,7 +13,7 @@ export interface Squad {
         mission: Mission<any>,
         matchAwareness: MatchAwareness,
         logger: DebugLogger,
-    ): MissionAction;
+    ): void;
 
     getGlobalDebugText(): string | undefined;
 }

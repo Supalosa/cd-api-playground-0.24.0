@@ -1,4 +1,13 @@
-import { AttackState, ObjectType, OrderType, StanceType, UnitData, Vector2, ZoneType } from "@chronodivide/game-api";
+import {
+    AttackState,
+    MovementZone,
+    ObjectType,
+    OrderType,
+    StanceType,
+    UnitData,
+    Vector2,
+    ZoneType,
+} from "@chronodivide/game-api";
 import { getDistanceBetweenPoints, getDistanceBetweenUnits } from "../../../map/map.js";
 import { BatchableAction } from "../../actionBatcher.js";
 
@@ -18,7 +27,11 @@ export function manageMoveMicro(attacker: UnitData, attackPoint: Vector2): Batch
         }
     }
 
-    return BatchableAction.toPoint(attacker.id, OrderType.AttackMove, attackPoint);
+    const rawAction = BatchableAction.toPoint(attacker.id, OrderType.AttackMove, attackPoint);
+    if (attacker.rules.movementZone === MovementZone.Fly) {
+        return rawAction.withCooldown(600 * (1 / attacker.rules.jumpjetTurnRate));
+    }
+    return rawAction;
 }
 
 export function manageAttackMicro(attacker: UnitData, target: UnitData): BatchableAction | null {
@@ -46,7 +59,11 @@ export function manageAttackMicro(attacker: UnitData, target: UnitData): Batchab
         // Special case for mirage tank/spy as otherwise they just sit next to it.
         orderType = OrderType.ForceAttack;
     }
-    return BatchableAction.toTargetId(attacker.id, orderType, target.id);
+    const rawAction = BatchableAction.toTargetId(attacker.id, orderType, target.id);
+    if (attacker.rules.movementZone === MovementZone.Fly) {
+        return rawAction.withCooldown(600 * (1 / attacker.rules.jumpjetTurnRate));
+    }
+    return rawAction;
 }
 
 /**

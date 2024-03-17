@@ -3,7 +3,7 @@ import { GlobalThreat } from "../threat/threat.js";
 import { BasicGroundUnit } from "./basicGroundUnit.js";
 
 const IDEAL_HARVESTERS_PER_REFINERY = 2;
-const MAX_HARVESTERS_PER_REFINERY = 4;
+const MAX_HARVESTERS_PER_REFINERY = 3;
 
 export class Harvester extends BasicGroundUnit {
     constructor(

@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { Agent, Bot, CreateBaseOpts, CreateOfflineOpts, CreateOnlineOpts, cdapi } from "@chronodivide/game-api";
 import { BotDifficulty, SupalosaBot } from "./bot/bot.js";
-import { DummyBot } from "./dummyBot/dummyBot.js";
 import { Countries } from "./bot/logic/common/utils.js";
 
 // The game will automatically end after this time. This is to handle stalemates.
@@ -123,7 +122,13 @@ async function main() {
             console.log(`Game forced to end due to timeout`);
             break;
         }
-        await game.update();
+        try {
+            await game.update();
+        } catch (e) {
+            console.error("fatal error in game update", e);
+            game.saveReplay();
+            game.dispose();
+        }
     }
 
     game.saveReplay();

@@ -1,6 +1,6 @@
 // Used to group related actions together to minimise actionApi calls. For example, if multiple units
 
-import { ActionsApi, OrderType, Vector2 } from "@chronodivide/game-api";
+import { ActionsApi, GameApi, OrderType, Vector2 } from "@chronodivide/game-api";
 import { groupBy } from "../common/utils.js";
 
 // are ordered to move to the same location, all of them will be ordered to move in a single action.
@@ -12,6 +12,7 @@ export class BatchableAction {
         private _targetId?: number,
         // If you don't want this action to be swallowed by dedupe, provide a unique nonce
         private _nonce: number = 0,
+        private _cooldown: number | null = null,
     ) {}
 
     static noTarget(unitId: number, orderType: OrderType, nonce: number = 0) {
@@ -42,6 +43,22 @@ export class BatchableAction {
         return this._targetId;
     }
 
+    public get cooldown() {
+        return this._cooldown;
+    }
+
+    // Debounce same action if submitted within a short period of time.
+    public withCooldown(cooldownTicks: number) {
+        return new BatchableAction(
+            this._unitId,
+            this._orderType,
+            this._point,
+            this._targetId,
+            this._nonce,
+            cooldownTicks,
+        );
+    }
+
     public isSameAs(other: BatchableAction) {
         if (this._unitId !== other._unitId) {
             return false;
@@ -58,12 +75,26 @@ export class BatchableAction {
         if (this._nonce !== other._nonce) {
             return false;
         }
+        if (this._cooldown !== other._cooldown) {
+            return false;
+        }
         return true;
     }
 }
 
+type BatchedActionData = {
+    action: BatchableAction;
+    executedAt: number;
+};
+
+/**
+ * Push actions to be executed if the action is different from the last action we submitted to it.
+ * Prevents spamming redundant orders, which affects performance and can also cause the unit to sit around doing nothing.
+ */
 export class ActionBatcher {
     private actions: BatchableAction[];
+
+    private lastOrderExecuted: { [unitId: number]: BatchedActionData } = {};
 
     constructor() {
         this.actions = [];
@@ -73,8 +104,26 @@ export class ActionBatcher {
         this.actions.push(action);
     }
 
-    resolve(actionsApi: ActionsApi) {
-        const groupedCommands = groupBy(this.actions, (action) => action.orderType.valueOf().toString());
+    resolve(gameApi: GameApi, actionsApi: ActionsApi) {
+        const currentTick = gameApi.getCurrentTick();
+        const filteredActions = this.actions.filter((action) => {
+            const lastAction = this.lastOrderExecuted[action.unitId];
+            return (
+                !lastAction ||
+                !lastAction.action.isSameAs(action) ||
+                !lastAction.action.cooldown ||
+                currentTick > lastAction.executedAt + lastAction.action.cooldown
+            );
+        });
+
+        filteredActions.forEach((action) => {
+            this.lastOrderExecuted[action.unitId] = {
+                action,
+                executedAt: currentTick,
+            };
+        });
+
+        const groupedCommands = groupBy(filteredActions, (action) => action.orderType.valueOf().toString());
         const vectorToStr = (v: Vector2) => v.x + "," + v.y;
         const strToVector = (str: string) => {
             const [x, y] = str.split(",");
@@ -120,5 +169,6 @@ export class ActionBatcher {
                 );
             }
         });
+        this.actions = [];
     }
 }

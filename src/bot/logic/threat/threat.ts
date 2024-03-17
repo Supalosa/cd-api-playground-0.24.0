@@ -11,5 +11,6 @@ export class GlobalThreat {
         public totalAvailableAntiGroundFirepower: number, // how much anti-ground power we have
         public totalAvailableAntiAirFirepower: number, // how much anti-air power we have
         public totalAvailableAirPower: number, // how much firepower we have in air units
+        public totalThreatPerPlayer: { [name: string]: number }, // how much firepower each player has
     ) {}
 }
